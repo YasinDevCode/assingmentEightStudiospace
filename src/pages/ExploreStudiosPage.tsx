@@ -19,22 +19,36 @@ export function ExploreStudiosPage() {
   );
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const debouncedSearch = useDebounce(search, 250);
-  const [sort, setSort] = useState('rating');
-  const [maxRate, setMaxRate] = useState('');
+  const [sort, setSort] = useState(
+    ['rating', 'newest', 'price_asc', 'price_desc'].includes(searchParams.get('sort') || '')
+      ? searchParams.get('sort') || 'rating'
+      : 'rating'
+  );
+  const [maxRate, setMaxRate] = useState(searchParams.get('maxRate') || '');
   const [studios, setStudios] = useState<Studio[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
 
-  // Keep category synced if navigated from Footer or Home category cards
+  // Keep filters synced when the URL changes or when the page is restored by navigation.
   useEffect(() => {
     const paramCat = searchParams.get('category') || 'All';
     if (ALL_CATEGORIES.includes(paramCat) && paramCat !== category) {
       setCategory(paramCat);
+    }
+    const paramSearch = searchParams.get('q') || '';
+    if (paramSearch !== search) setSearch(paramSearch);
+    const paramMaxRate = searchParams.get('maxRate') || '';
+    if (paramMaxRate !== maxRate) setMaxRate(paramMaxRate);
+    const paramSort = searchParams.get('sort') || 'rating';
+    if (['rating', 'newest', 'price_asc', 'price_desc'].includes(paramSort) && paramSort !== sort) {
+      setSort(paramSort);
     }
   }, [searchParams]);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setFetchError('');
     const params = new URLSearchParams();
     if (category !== 'All') params.set('category', category);
     if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
@@ -45,8 +59,11 @@ export function ExploreStudiosPage() {
       .then((res) => {
         if (active) setStudios(res.studios || []);
       })
-      .catch(() => {
-        if (active) setStudios([]);
+      .catch((error: unknown) => {
+        if (active) {
+          setStudios([]);
+          setFetchError(error instanceof Error ? error.message : 'Could not load studio workspaces.');
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -64,6 +81,39 @@ export function ExploreStudiosPage() {
       nextParams.delete('category');
     } else {
       nextParams.set('category', next);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleSearchChange = (next: string) => {
+    setSearch(next);
+    const nextParams = new URLSearchParams(searchParams);
+    if (next.trim()) {
+      nextParams.set('q', next);
+    } else {
+      nextParams.delete('q');
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleMaxRateChange = (next: string) => {
+    setMaxRate(next);
+    const nextParams = new URLSearchParams(searchParams);
+    if (next) {
+      nextParams.set('maxRate', next);
+    } else {
+      nextParams.delete('maxRate');
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleSortChange = (next: string) => {
+    setSort(next);
+    const nextParams = new URLSearchParams(searchParams);
+    if (next === 'rating') {
+      nextParams.delete('sort');
+    } else {
+      nextParams.set('sort', next);
     }
     setSearchParams(nextParams, { replace: true });
   };
@@ -100,7 +150,7 @@ export function ExploreStudiosPage() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Search by studio name, city, neighborhood, or equipment..."
               aria-label="Search studios"
               className="w-full h-11 pl-10 pr-3.5 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 text-sm text-zinc-950 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-600"
@@ -110,7 +160,7 @@ export function ExploreStudiosPage() {
           <div className="md:col-span-3">
             <select
               value={maxRate}
-              onChange={(e) => setMaxRate(e.target.value)}
+              onChange={(e) => handleMaxRateChange(e.target.value)}
               aria-label="Maximum hourly rate"
               className="w-full h-11 px-3.5 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 text-sm text-zinc-950 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
@@ -125,7 +175,7 @@ export function ExploreStudiosPage() {
           <div className="md:col-span-3">
             <select
               value={sort}
-              onChange={(e) => setSort(e.target.value)}
+              onChange={(e) => handleSortChange(e.target.value)}
               aria-label="Sort studios"
               className="w-full h-11 px-3.5 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 text-sm text-zinc-950 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
@@ -185,6 +235,23 @@ export function ExploreStudiosPage() {
           {Array.from({ length: 6 }).map((_, idx) => (
             <StudioCardSkeleton key={idx} />
           ))}
+        </div>
+      ) : fetchError ? (
+        <div className="py-20 px-6 text-center rounded-xl bg-white dark:bg-zinc-900 border border-red-200 dark:border-red-900/60">
+          <h2 className="font-display text-xl font-semibold text-zinc-950 dark:text-zinc-50">
+            Studios could not be loaded
+          </h2>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400 max-w-md mx-auto">
+            {fetchError}
+          </p>
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-sm font-semibold transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Try Again</span>
+          </button>
         </div>
       ) : studios.length === 0 ? (
         <div className="py-20 px-6 text-center rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
